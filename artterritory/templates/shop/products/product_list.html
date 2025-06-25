@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}Каталог товаров{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1>Каталог товаров</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <form class="d-flex" method="get" action="{% url 'product_list' %}">
+            <input class="form-control me-2" type="search" name="search" placeholder="Поиск..."
+                   value="{{ search_query }}">
+            <button class="btn btn-outline-primary" type="submit">
+                <i class="bi bi-search"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-filter"></i> Фильтры
+            </div>
+            <div class="card-body">
+                <form method="get">
+                    <div class="mb-3">
+                        <label class="form-label">Категория</label>
+                        <select name="category" class="form-select">
+                            <option value="">Все категории</option>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}"
+                                {% if selected_category == category.id %}selected{% endif %}>
+                                {{ category.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Производитель</label>
+                        <select name="manufacturer" class="form-select">
+                            <option value="">Все производители</option>
+                            {% for manufacturer in manufacturers %}
+                            <option value="{{ manufacturer.id }}"
+                                {% if selected_manufacturer == manufacturer.id %}selected{% endif %}>
+                                {{ manufacturer.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-funnel"></i> Применить
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <div class="row">
+            {% for product in products %}
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card h-100 product-card">
+                    <img src="{{ product.photo.url }}" class="card-img-top" alt="{{ product.name }}" style="height: 200px; object-fit: cover;">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ product.name }}</h5>
+                        <p class="card-text text-truncate">{{ product.description }}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="h5 text-primary">{{ product.price }} ₽</span>
+                            <span class="badge bg-secondary">
+                                <i class="bi bi-box"></i> {{ product.quantity }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white">
+                        <a href="{% url 'product_detail' product.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i> Подробнее
+                        </a>
+                        {% if user.is_authenticated %}
+                        <form action="{% url 'add_to_cart' product.id %}" method="post" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                <i class="bi bi-cart-plus"></i> В корзину
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Товары не найдены
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
