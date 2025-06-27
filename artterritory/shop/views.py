@@ -1,13 +1,20 @@
+import os
+import openpyxl
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Sum
 from django.contrib import messages
-from .models import Product, Category, Manufacturer, Trash, TrashElement
+from .models import Product, Category, Manufacturer, Trash, TrashElement, Order, OrderItem
 from django.shortcuts import render, redirect
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required
 from . import specialty_search
+from openpyxl.utils import get_column_letter
+from django.conf import settings
+from django.core.mail import EmailMessage
+from django.template.loader import render_to_string
+from .forms import CheckoutForm
   
 def index(request):
     return HttpResponse("Приложение для управления работает!")
@@ -110,6 +117,127 @@ def update_cart(request, item_id):
 
     return redirect('cart_view')
 
+
+@login_required
+def checkout(request):
+    trash = get_object_or_404(Trash, user=request.user)
+    cart_items = trash.items.select_related('product')
+
+    if not cart_items.exists():
+        return redirect('cart_view')
+
+    total = sum(item.cost() for item in cart_items)
+
+    if request.method == 'POST':
+        form = CheckoutForm(request.POST)
+        if form.is_valid():
+            order = Order.objects.create(
+                user=request.user,
+                shipping_address=form.cleaned_data['shipping_address'],
+                total_price=total
+            )
+
+            for item in cart_items:
+                OrderItem.objects.create(
+                    order=order,
+                    product=item.product,
+                    quantity=item.quantity,
+                    price=item.product.price
+                )
+
+                item.product.quantity -= item.quantity
+                item.product.save()
+
+            excel_file = generate_order_excel(order)
+
+            send_order_email(request.user, order, excel_file)
+
+            trash.items.all().delete()
+
+            return redirect('order_success', order_id=order.id)
+    else:
+        form = CheckoutForm()
+
+    context = {
+        'form': form,
+        'cart_items': cart_items,
+        'total': total
+    }
+    return render(request, 'shop/checkout.html', context)
+
+
+def generate_order_excel(order):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Заказ"
+
+    headers = ["№", "Товар", "Количество", "Цена за ед.", "Сумма"]
+    for col_num, header in enumerate(headers, 1):
+        col_letter = get_column_letter(col_num)
+        ws[f'{col_letter}1'] = header
+        ws[f'{col_letter}1'].font = openpyxl.styles.Font(bold=True)
+
+    row_num = 2
+    for item in order.items.all():
+        ws[f'A{row_num}'] = row_num - 1
+        ws[f'B{row_num}'] = item.product.name
+        ws[f'C{row_num}'] = item.quantity
+        ws[f'D{row_num}'] = float(item.price)
+        ws[f'E{row_num}'] = float(item.cost())
+        row_num += 1
+
+    ws[f'D{row_num}'] = "ИТОГО:"
+    ws[f'D{row_num}'].font = openpyxl.styles.Font(bold=True)
+    ws[f'E{row_num}'] = float(order.total_price)
+    ws[f'E{row_num}'].font = openpyxl.styles.Font(bold=True)
+
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+        adjusted_width = (max_length + 2) * 1.2
+        ws.column_dimensions[column].width = adjusted_width
+
+    filename = f'order_{order.id}.xlsx'
+    filepath = os.path.join(settings.MEDIA_ROOT, 'orders', filename)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    wb.save(filepath)
+
+    return filepath
+
+
+def send_order_email(user, order, excel_file):
+    subject = f'Ваш заказ #{order.id} оформлен'
+
+    context = {
+        'user': user,
+        'order': order,
+    }
+    message = render_to_string('shop/email/order_confirmation.txt', context)
+
+    email = EmailMessage(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email]
+    )
+
+    with open(excel_file, 'rb') as f:
+        email.attach(f'order_{order.id}.xlsx', f.read(),
+                     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    email.send()
+
+    if os.path.exists(excel_file):
+        os.remove(excel_file)
+
+
+@login_required
+def order_success(request, order_id):
+    order = get_object_or_404(Order, id=order_id, user=request.user)
+    return render(request, 'shop/order_success.html', {'order': order})
 
 @login_required
 def remove_from_cart(request, item_id):

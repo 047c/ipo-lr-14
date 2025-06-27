@@ -1,0 +1,19 @@
+Здравствуйте, {{ user.username }}!
+
+Ваш заказ №{{ order.id }} успешно оформлен.
+
+Детали заказа:
+Дата: {{ order.created_at|date:"d.m.Y H:i" }}
+Адрес доставки: {{ order.shipping_address }}
+Сумма заказа: {{ order.total_price }} руб.
+
+Состав заказа:
+{% for item in order.items.all %}
+- {{ item.product.name }}: {{ item.quantity }} шт. × {{ item.price }} руб. = {{ item.cost }} руб.
+{% endfor %}
+
+В прикрепленном файле вы найдете детализированный чек.
+
+Спасибо за покупку!
+С уважением,
+Команда магазина
