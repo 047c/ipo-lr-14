@@ -1,6 +1,15 @@
 import os
 import openpyxl
 from django.http import HttpResponse
+from .serializers import (
+    CategorySerializer,
+    ManufacturerSerializer,
+    ProductSerializer,
+    CartSerializer,
+    CartItemSerializer,
+    OrderSerializer
+)
+from rest_framework import viewsets, permissions
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Sum
 from django.contrib import messages
@@ -308,6 +317,62 @@ def cart_count(request):
         )['total'] or 0
         return {'cart_count': count}
     return {'cart_count': 0}
+
+class IsOwner(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        return obj.user == request.user
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.IsAdminUser]
+
+class ManufacturerViewSet(viewsets.ModelViewSet):
+    queryset = Manufacturer.objects.all()
+    serializer_class = ManufacturerSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+class CartViewSet(viewsets.ModelViewSet):
+    serializer_class = CartSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
+
+    queryset = Trash.objects.all()
+
+    def get_queryset(self):
+        return Trash.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class CartItemViewSet(viewsets.ModelViewSet):
+    serializer_class = CartItemSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
+
+    queryset = TrashElement.objects.all()
+
+    def get_queryset(self):
+        return TrashElement.objects.filter(cart__user=self.request.user)
+
+    def perform_create(self, serializer):
+        cart, created = Trash.objects.get_or_create(user=self.request.user)
+        serializer.save(cart=cart)
+
+class OrderViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
+
+    queryset = Order.objects.all()
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 def main(request):
     return HttpResponse('<div style="display: flex; align-items: center; flex-direction: column;"><h1>Добро пожаловать!</h1><div style="display: flex; justify-content: space-around; width: 100%"><h2 style="width: 50%"><a href="author/">Автор</a></h2><h2><a href="shop/">Магазин</a></h2></div></div>')

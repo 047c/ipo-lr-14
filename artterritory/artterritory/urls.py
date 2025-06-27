@@ -47,5 +47,7 @@ urlpatterns = [
     ), name='logout'),
     path('checkout/', views.checkout, name='checkout'),
     path('order_success/<int:order_id>/', views.order_success, name='order_success'),
+    path('api/', include('shop.api_urls')),
+    path('api-auth/', include('rest_framework.urls')),
 ]
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
